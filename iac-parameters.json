@@ -1,0 +1,30 @@
+[
+    {
+        "ParameterKey": "EnvironmentName",
+        "ParameterValue": "deploy-high-availability-web-app"
+    },
+    {
+        "ParameterKey": "VpcCIDR",
+        "ParameterValue": "10.0.0.0/16"
+    },
+    {
+        "ParameterKey": "FirstPublicSubnetCIDR",
+        "ParameterValue": "10.0.0.0/24"
+    },
+    {
+        "ParameterKey": "SecondPublicSubnetCIDR",
+        "ParameterValue": "10.0.1.0/24"
+    },
+    {
+        "ParameterKey": "FirstPrivateSubnetCIDR",
+        "ParameterValue": "10.0.2.0/24"
+    },
+    {
+        "ParameterKey": "SecondPrivateSubnetCIDR",
+        "ParameterValue": "10.0.3.0/24"
+    },
+    {
+        "ParameterKey": "ImageID",
+        "ParameterValue": "ami-007855ac798b5175e"
+    }
+]

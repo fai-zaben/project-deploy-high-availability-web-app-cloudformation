@@ -1,0 +1,320 @@
+Description: >
+  High Availability Web App Infrastructure as Code 
+  using CloudFormation.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be used as a tag to the resource.
+    Type: String
+  VpcCIDR:
+    Description: CIDR used to the Virtual Private Network (VPC)
+    Type: String
+  FirstPublicSubnetCIDR:
+    Description: CIDR used to the First Public Subnet.
+    Type: String
+  SecondPublicSubnetCIDR:
+    Description: CIDR used to the Second Public Subnet.
+    Type: String
+  FirstPrivateSubnetCIDR:
+    Description: CIDR used to the First Private Subnet.
+    Type: String
+  SecondPrivateSubnetCIDR:
+    Description: CIDR used to the Second Private Subnet.
+    Type: String
+  ImageID:
+    Description: Ubuntu AMI ID used to launch an EC2 Instance.
+    Type: String
+
+Resources:
+# 1. Network Section:
+# VPC which will contain all of our infrastructure resources
+  VPC: 
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-VPC
+
+# Public Subnets
+  FirstPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref FirstPublicSubnetCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PublicSubnet-AZ1
+
+  SecondPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref SecondPublicSubnetCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PublicSubnet-AZ2
+
+# Private Subnets
+  FirstPrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref FirstPrivateSubnetCIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateSubnet-AZ1
+
+  SecondPrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref SecondPrivateSubnetCIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateSubnet-AZ2
+
+# Creating the Internet Gateway and attach it to the VPC
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-InternetGateway
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+# Creating an Elastic IP and attach it to the NAT Gateways.
+# NAT Gateways are required to allow sending/recieving requestes/responses to and from the web app in the private subnets.
+
+  FisrtNATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  SecondNATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  FisrtNATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt FisrtNATGatewayEIP.AllocationId
+      SubnetId: !Ref FirstPublicSubnet
+
+  SecondNATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt SecondNATGatewayEIP.AllocationId
+      SubnetId: !Ref SecondPublicSubnet
+
+# Creating route tables to manage trafic flow in public ind private subnets.
+# Route Table for the public subnets. Allow communication through the Internet.
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref VPC
+      Tags: 
+        - Key: Name 
+          Value: !Sub ${EnvironmentName}-PublicRoutes
+
+  PublicRoute: 
+    Type: AWS::EC2::Route
+    Properties: 
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  FirstPublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref FirstPublicSubnet
+
+  SecondPublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref SecondPublicSubnet
+
+# Route Table for the private subnets. Allow communication only through the NAT Gateways.
+# Two Route Tables created to allow future enhancement on each private subnet seperatly.
+
+  FisrtPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref VPC
+      Tags: 
+        - Key: Name 
+          Value: !Sub ${EnvironmentName}-PrivateRoutes-AZ1
+
+  FirstPrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref FisrtPrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref FisrtNATGateway
+
+  FirstPrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FisrtPrivateRouteTable
+      SubnetId: !Ref FirstPrivateSubnet
+
+  SecondPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref VPC
+      Tags: 
+        - Key: Name 
+          Value: !Sub ${EnvironmentName}-PrivateRoutes-AZ2
+
+  SecondPrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref SecondPrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref SecondNATGateway
+
+  SecondPrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SecondPrivateRouteTable
+      SubnetId: !Ref SecondPrivateSubnet
+
+# Load Balancer and Web App Security Groups
+  LoadBalancerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our load balancer
+      VpcId: !Ref VPC 
+      SecurityGroupIngress: # Allow all inbound trafic from port 80.
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0 
+      SecurityGroupEgress: # Allow all outbound trafic to port 80.
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+
+  WebServerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http requests to our web app
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp # Allow http trafic to the server.
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress: # Allow all outbound trafic from the server.
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+
+# 2. Servers Section:
+# Telling the autoscaling group service what machine to launch.
+  WebAppLaunchConfig: 
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      UserData:
+        Fn::Base64: !Sub | # LaunchConfiguration script based on AWS documentation
+          #!/bin/bash
+          apt-get update -y
+          apt-get install apache2 -y
+          systemctl start apache2.service
+          cd /var/www/html
+          echo "Udacity Demo Web Server Up and Running!" > index.html     
+      ImageId: !Ref ImageID
+      SecurityGroups:
+      - Ref: WebServerSecGroup
+      InstanceType: t3.small # 2 vCPU
+      BlockDeviceMappings:
+      - DeviceName: "/dev/sdk"
+        Ebs:
+          VolumeSize: '10' # 10 GB
+
+# Auto Scaling Group
+  WebAppAutoScalingGroup: 
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: # private subnets for their auto-scaling instances
+      - !Ref FirstPrivateSubnet
+      - !Ref SecondPrivateSubnet
+      LaunchConfigurationName:
+        Ref: WebAppLaunchConfig
+      MinSize: '2'
+      MaxSize: '4'
+      TargetGroupARNs:
+      - Ref: WebAppTargetGroup
+
+# Load Balancer
+  WebAppLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+      - !Ref FirstPublicSubnet
+      - !Ref SecondPublicSubnet
+      SecurityGroups:
+      - Ref: LoadBalancerSecGroup
+
+# Listener and Listener Rule
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: WebAppTargetGroup
+      LoadBalancerArn:
+        Ref: WebAppLoadBalancer
+      Port: '80'
+      Protocol: HTTP
+
+  LoadBalancerListenerRule:
+      Type: AWS::ElasticLoadBalancingV2::ListenerRule
+      Properties:
+        Actions:
+        - Type: forward
+          TargetGroupArn: !Ref 'WebAppTargetGroup'
+        Conditions:
+        - Field: path-pattern
+          Values: [/]
+        ListenerArn: !Ref 'Listener'
+        Priority: 1
+
+# Target Group and Health Check
+  WebAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: !Ref VPC
+
+Outputs:
+  WebsiteURL:
+    Value: !Sub http://${WebAppLoadBalancer.DNSName}
+    Description: Application URL
