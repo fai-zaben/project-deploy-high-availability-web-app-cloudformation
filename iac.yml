@@ -122,7 +122,7 @@ Resources:
       AllocationId: !GetAtt SecondNATGatewayEIP.AllocationId
       SubnetId: !Ref SecondPublicSubnet
 
-# Creating route tables to manage trafic flow in public ind private subnets.
+# Creating route tables to manage trafic flow in public and private subnets.
 # Route Table for the public subnets. Allow communication through the Internet.
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -255,7 +255,7 @@ Resources:
   WebAppAutoScalingGroup: 
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      VPCZoneIdentifier: # private subnets for their auto-scaling instances
+      VPCZoneIdentifier: # private subnets for the auto-scaling instances
       - !Ref FirstPrivateSubnet
       - !Ref SecondPrivateSubnet
       LaunchConfigurationName:
