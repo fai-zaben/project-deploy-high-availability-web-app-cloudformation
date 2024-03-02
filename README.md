@@ -45,6 +45,3 @@ The Diagram mentioned above has been translated to Infrastructure as a Code (Iaa
 2. Website URL in Output Section
 
 ![TargetGroup](screenshoots/website-url.png)
-
-3. Website in Browser
-![TargetGroup](screenshoots/browser.png)
